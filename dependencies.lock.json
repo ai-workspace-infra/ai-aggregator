@@ -1,0 +1,6 @@
+{
+  "playbooks": {"repository": "https://github.com/ai-workspace-infra/playbooks.git", "revision": "6c2cf608e19dfcec6de5b5330d89457235977ceb"},
+  "gateway": {"repository": "https://github.com/ai-workspace-services/gateway.git", "revision": "926590f18bf7096a93204c45f8f919153b540aeb"},
+  "gitops": {"repository": "https://github.com/ai-workspace-infra/gitops.git", "revision": "319647901de20d539cb61a6f5fb623b80e286da4"},
+  "platform-ops-toolkit": {"repository": "https://github.com/ai-workspace-infra/platform-ops-toolkit.git", "revision": "9b68ff0e3a9a66b12eb754f372645e42e49d0060"}
+}
