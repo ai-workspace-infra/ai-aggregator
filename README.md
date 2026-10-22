@@ -73,6 +73,41 @@ bash /opt/ai-gateway/scripts/setup-ai-gateway.sh --uninstall
 
 ## 快速入口
 
+### curl 一条 Shell 安装
+
+安装的是部署/验证工具，不是 Caddy、New API、APISIX、Kong 或 CPA 服务。支持 Linux/macOS，无需 sudo，不修改 shell profile；前置为 Python 3.10+、venv/pip 和 GitHub 私有仓库读取权限。先用 `gh auth login` 登录，或将最小只读 Token 放入 `GH_TOKEN` 环境变量，禁止在 URL 或参数中写真实 Token。
+
+以下为 bash/zsh 控制终端命令。`REF` 必须换成已审核的完整 40 位 commit SHA，不使用 `main`、可变分支或短 SHA：
+
+```bash
+set +x
+set -o pipefail
+REF='<完整40位commit SHA>'
+{
+  printf 'url = "https://raw.githubusercontent.com/ai-workspace-infra/ai-aggregator/%s/scripts/install.sh"\n' "$REF"
+  printf 'header = "Authorization: Bearer %s"\n' "${GH_TOKEN:-$(gh auth token)}"
+} | curl --config - --fail --silent --show-error --proto '=https' \
+  | sh -s -- --ref "$REF"
+```
+
+curl 的认证头通过标准输入传递，不出现在进程命令参数。安装器在内存读取 GitHub Token，下载固定 SHA 的源码并移除跨主机重定向的认证头；不会保存 GitHub Token。`curl | sh` 仍然是执行远程代码，应先审核指定 SHA 的安装脚本；需要更严格审计时先下载、检查，再用 `sh install.sh --ref "$REF"` 执行。
+
+默认安装到 `~/.local/share/ai-aggregator`，支持 `--prefix /path/to/ai-aggregator`。每个 commit 独立 release，已有 release 不覆盖；安装失败的 release 保留供检查。升级使用新 SHA，成功后只更新工具入口。工具回滚可直接运行旧 release 的 `.venv/bin/python scripts/deploy.py` / `scripts/verify.py`，不会自动回滚服务器。
+
+```bash
+export PATH="$HOME/.local/share/ai-aggregator/bin:$PATH"
+ai-aggregator-deploy --help
+ai-aggregator-verify --help
+ai-aggregator-bootstrap --help
+ai-aggregator-install --help
+```
+
+真正部署仍需干净的固定版本 playbooks、inventory、GitOps 声明、Ansible 与 Vault 前置条件。默认 `plan`；`stage/activate` 需显式审批参数，Kong 自动变更仍被阻止。
+
+完整分步操作见 [Bootstrap 与 Install](docs/bootstrap-and-install.zh.md)。`bootstrap` 准备控制机；`install` 调用 canonical stage，默认不切流。现有 role 依赖预装 Runtime/artifact，不是全新裸机的无前置一键安装。
+
+### 从 checkout 使用
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt

@@ -2,6 +2,7 @@
 """Thin, fail-closed entrypoint; canonical roles remain in playbooks."""
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -29,7 +30,7 @@ def validate_selection(manifest, mode, operation, approved):
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     p.add_argument('--mode', choices=['direct-new-api', 'apisix', 'kong'], required=True)
     p.add_argument('--operation', choices=['plan', 'stage', 'activate'], default='plan')
     p.add_argument('--manifest', type=Path, required=True)
@@ -37,6 +38,8 @@ def main():
     p.add_argument('--playbooks', type=Path, required=True)
     p.add_argument('--approve-change', action='store_true')
     p.add_argument('--syntax-check', action='store_true')
+    p.add_argument('--apisix-bundle-dir', type=Path, help='Non-sensitive rendered config.yaml/apisix.yaml directory')
+    p.add_argument('--vault-tls-runtime', action='store_true', help='Use the existing Vault TLS runtime contract')
     a = p.parse_args()
     try:
         # Never print parser errors: they may contain a source line with secrets.
@@ -51,11 +54,26 @@ def main():
             raise ValueError('Use a clean playbooks checkout at the locked revision')
         extra = {'ai_aggregator_manifest_file': str(a.manifest.resolve()),
                  'ai_aggregator_operation': a.operation}
-        command = ['ansible-playbook', '-i', str(a.inventory.resolve()),
+        if a.apisix_bundle_dir:
+            for name in ['config.yaml', 'apisix.yaml']:
+                if not (a.apisix_bundle_dir / name).is_file():
+                    raise ValueError('Rendered APISIX bundle is incomplete')
+            extra['ai_aggregator_apisix_bundle_dir'] = str(a.apisix_bundle_dir.resolve())
+        if a.mode == 'apisix' and a.operation == 'stage' and not a.apisix_bundle_dir:
+            raise ValueError('APISIX stage requires --apisix-bundle-dir')
+        if a.vault_tls_runtime:
+            extra['ai_aggregator_vault_tls_runtime_enabled'] = True
+        local_ansible = Path(sys.executable).parent / 'ansible-playbook'
+        executable = str(local_ansible) if local_ansible.is_file() else 'ansible-playbook'
+        command = [executable, '-i', str(a.inventory.resolve()),
                    'deploy_ai_aggregator.yaml', '-e', json.dumps(extra)]
         if a.syntax_check:
             command.append('--syntax-check')
-        return subprocess.call(command, cwd=a.playbooks)
+        environment = dict(os.environ)
+        collections = a.playbooks.resolve().parent / 'collections'
+        if collections.is_dir():
+            environment['ANSIBLE_COLLECTIONS_PATH'] = str(collections)
+        return subprocess.call(command, cwd=a.playbooks, env=environment)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
