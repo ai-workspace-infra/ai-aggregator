@@ -1,0 +1,82 @@
+name: Test Setup AI Gateway Script
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+
+      - name: ShellCheck validation
+        run: |
+          shellcheck scripts/setup-ai-gateway.sh
+
+      - name: Bash syntax check (bash -n)
+        run: |
+          bash -n scripts/setup-ai-gateway.sh
+
+      - name: Test --help flag
+        run: |
+          bash scripts/setup-ai-gateway.sh --help
+
+      - name: Test --dry-run on Ubuntu host (Standalone)
+        run: |
+          sudo bash scripts/setup-ai-gateway.sh --domain ai.example.com --standalone --dry-run
+
+      - name: Test --dry-run on Ubuntu host (Team mode)
+        run: |
+          export AI_GATEWAY_DOMAIN="ai.example.com"
+          export MCP_DOMAIN="mcp.example.com"
+          export UPSTREAM_API_KEY="test-secret-key"
+          export MCP_SERVICE_TOKEN="test-mcp-token"
+          sudo -E bash scripts/setup-ai-gateway.sh --domain "$AI_GATEWAY_DOMAIN" --with-mcp --dry-run
+          unset UPSTREAM_API_KEY MCP_SERVICE_TOKEN
+
+      - name: Test fail-closed on missing team mode env vars
+        run: |
+          if sudo bash scripts/setup-ai-gateway.sh --domain ai.example.com --with-mcp --dry-run; then
+            echo "Expected team mode without env vars to fail, but it succeeded"
+            exit 1
+          fi
+
+      - name: Test Docker container smoke test (Debian 12)
+        run: |
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" debian:12-slim bash scripts/setup-ai-gateway.sh --help
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" debian:12-slim bash scripts/setup-ai-gateway.sh --domain ai.example.com --standalone --dry-run
+
+      - name: Test Docker container smoke test (Ubuntu 24.04)
+        run: |
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" ubuntu:24.04 bash scripts/setup-ai-gateway.sh --domain ai.example.com --standalone --dry-run
+
+      - name: Test idempotency in dry-run
+        run: |
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" debian:12-slim bash -c '
+          mkdir -p /opt/ai-gateway
+          cat <<EOF > /opt/ai-gateway/installed.version
+          VERSION=1.0.0
+          CADDY_IMAGE=caddy:2.8.4-alpine
+          NEW_API_IMAGE=calciumion/new-api:v0.4.10
+          LITELLM_IMAGE=ghcr.io/berriai/litellm:v1.51.0
+          DOMAIN=ai.example.com
+          MODE=standalone
+          UPDATED_AT=2026-10-22T00:00:00Z
+          EOF
+          bash scripts/setup-ai-gateway.sh --domain ai.example.com --standalone --dry-run
+          '
+
+      - name: Test --uninstall in dry-run
+        run: |
+          sudo bash scripts/setup-ai-gateway.sh --uninstall --dry-run

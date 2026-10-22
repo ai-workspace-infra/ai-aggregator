@@ -15,6 +15,52 @@ AI Aggregator 专用部署入口、模式说明与验收记录。凭据、OAuth 
 
 Home-Lab 入口为 `https://ai-internal.onwalk.net/v1`。`bootstrap_client_key` 不是 New API 用户 Key，不能替代用户身份或账本。
 
+## 🚀 快速开始
+
+使用单行命令在 Debian 12+ 或 Ubuntu 22.04+ 实例上自动化安装与配置 AI Gateway（Caddy 2.8.4-alpine 自动 HTTPS 反向代理 + New API v0.4.10 权限管理 + LiteLLM v1.51.0 路由统计），部署目录位于 `/opt/ai-gateway`。
+
+> [!NOTE]
+> Note that `ai-aggregator` is a private repository and the raw command will be accessible publicly once the repository is made public.
+> （当前仓库为私有仓库，公开后可通过上述 raw 链接直接执行；在私有阶段可通过 GitHub Token 授权访问或在克隆仓库后执行 `bash scripts/setup-ai-gateway.sh ...`）。
+
+### 1. 单机模式（Standalone）
+
+适用于单节点开发或测试环境，自动生成初始根凭据，并配置本地 Mock/默认模型：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ai-workspace-infra/ai-aggregator/main/scripts/setup-ai-gateway.sh | \
+  bash -s -- --domain ai.example.com --standalone
+```
+
+### 2. 团队模式（Team with MCP）
+
+适用于团队协同与 MCP 协议集成，运行时凭据直接从 HashiCorp Vault 注入环境变量（Fail-Closed 闭环校验）：
+
+```bash
+export AI_GATEWAY_DOMAIN="ai.example.com"
+export MCP_DOMAIN="mcp.example.com"
+export UPSTREAM_API_KEY="<runtime-secret>"
+export MCP_SERVICE_TOKEN="<runtime-secret>"
+curl -fsSL https://raw.githubusercontent.com/ai-workspace-infra/ai-aggregator/main/scripts/setup-ai-gateway.sh | \
+  bash -s -- --domain "$AI_GATEWAY_DOMAIN" --with-mcp
+unset UPSTREAM_API_KEY MCP_SERVICE_TOKEN
+```
+
+### 3. 卸载与清理
+
+如需停止网关服务并清理容器，可使用 `--uninstall` 参数。卸载过程会自动创建 `/opt/ai-gateway/data` 的时间戳备份：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ai-workspace-infra/ai-aggregator/main/scripts/setup-ai-gateway.sh | \
+  bash -s -- --uninstall
+```
+
+或者在已部署节点本地执行：
+
+```bash
+bash /opt/ai-gateway/scripts/setup-ai-gateway.sh --uninstall
+```
+
 ## 三种模式
 
 | 模式 | 操作文档 | 本次运行验证 | 自动部署边界 |
